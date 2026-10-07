@@ -1,6 +1,20 @@
-# 📚 Scholar Citation Monitor / 学术引用监控器
+# 📚 Scholar Citation Monitor S2 / 学术引用监控器 S2
 
 [English](#english) | [中文](#中文)
+
+---
+
+> ## 🌿 Fork 说明 / Fork Note
+>
+> 本仓库基于 [DreamH1gh/Scholar-Citation-Monitor](https://github.com/DreamH1gh/Scholar-Citation-Monitor)（MIT）扩展，新增 **Semantic Scholar 追踪模块**：
+>
+> - **🔗 Semantic Scholar 官方 API**：不爬页面、无反爬风险，追踪总引用 / h-index / 逐篇论文引用变化
+> - **📄 新增引用论文明细**：某篇论文被引用数上涨时，直接列出**是哪些新论文引用了它**（标题 / 作者 / 年份 / 出处，可点击跳转 DOI / arXiv / S2 主页）
+> - **🔍 三种添加方式共用一个输入框**：粘贴 Google Scholar 主页 URL、粘贴 Semantic Scholar 主页 URL（或纯数字作者 ID）、或**直接输入姓名**在 Semantic Scholar 搜索后点选添加
+> - **🔑 可选免费 API Key**：S2 免费共享池限流较严，在 ⚙ 设置里填入[免费申请的 API Key](https://www.semanticscholar.org/product/api#api-key-form) 后明显更稳
+> - 引用基线静默预热、429 指数退避、变化累积未读、引用历史曲线等机制与原版 Google Scholar 模块对齐
+>
+> This fork extends [DreamH1gh/Scholar-Citation-Monitor](https://github.com/DreamH1gh/Scholar-Citation-Monitor) (MIT) with a **Semantic Scholar module** powered by the official Graph API — no scraping, no anti-crawl: per-paper citation changes, the actual **new citing papers** (title / authors / year / venue with DOI / arXiv links), name-search author adding, and an optional free API key for relaxed rate limits.
 
 ---
 
@@ -54,6 +68,7 @@ scholar-citation-monitor/
 ├── 🎨 popup.html             # Main interface
 ├── ⚙️ popup.js               # Core functionality
 ├── 🔧 background.js          # Background service worker
+├── 🧩 s2.js                  # Semantic Scholar module (official Graph API)
 ├── 📝 content.js             # Content script (if needed)
 ├── 🖼️ icon16.png             # 16x16 icon
 ├── 🖼️ icon48.png             # 48x48 icon
@@ -104,10 +119,14 @@ Then reload the extension in Chrome (click the refresh button in `chrome://exten
 ### 🎮 How to Use
 
 1. **Click the extension icon** in your toolbar
-2. **Paste a Google Scholar profile URL** (e.g., `https://scholar.google.com/citations?user=XXXXXXX`)
+2. **Add authors in three ways** with the same input box:
+   - Paste a **Google Scholar profile URL** (e.g., `https://scholar.google.com/citations?user=XXXXXXX`)
+   - Paste a **Semantic Scholar profile URL** (e.g., `https://www.semanticscholar.org/author/J.-Weston/145183709`) or a bare numeric author ID
+   - Type a **researcher's name** and pick the right person from the Semantic Scholar search results
 3. **Click "Add Author"** and watch the magic happen ✨
 4. **Monitor multiple researchers** and see their citation counts update
 5. **Refresh manually** or let the background service do it automatically
+6. *(Optional)* Paste a free [Semantic Scholar API key](https://www.semanticscholar.org/product/api#api-key-form) in ⚙ Settings for more relaxed rate limits
 
 ### 🤔 Why This Extension?
 
@@ -165,10 +184,11 @@ scholar-citation-monitor/
 ├── 🎨 popup.html             # 主界面
 ├── ⚙️ popup.js               # 核心功能
 ├── 🔧 background.js          # 后台服务
+├── 🧩 s2.js                  # Semantic Scholar 模块（官方 Graph API）
 ├── 📝 content.js             # 内容脚本（如需要）
-├── 🖼️ icon16.png             # 16x16 图标
-├── 🖼️ icon48.png             # 48x48 图标
-└── 🖼️ icon128.png            # 128x128 图标
+├── 🖼️ icon16.png             # 16x16 icon
+├── 🖼️ icon48.png             # 48x48 icon
+└── 🖼️ icon128.png            # 128x128 icon
 ```
 
 ### 🛠️ 安装教程
@@ -215,10 +235,14 @@ git pull origin main
 ### 🎮 使用方法
 
 1. **点击工具栏中的扩展图标**
-2. **粘贴Google Scholar个人主页链接**（例如：`https://scholar.google.com/citations?user=XXXXXXX`）
+2. **一个输入框支持三种添加方式**：
+   - 粘贴 **Google Scholar 个人主页链接**（例如：`https://scholar.google.com/citations?user=XXXXXXX`）
+   - 粘贴 **Semantic Scholar 个人主页链接**（例如：`https://www.semanticscholar.org/author/J.-Weston/145183709`）或纯数字作者 ID
+   - 直接**输入学者姓名**，在 Semantic Scholar 搜索结果中点选添加
 3. **点击"添加作者"**，见证奇迹的发生✨
 4. **监控多个研究者**，查看他们的引用数更新
 5. **手动刷新**或让后台服务自动完成
+6. *（可选）* 在 ⚙ 设置中填入[免费申请的 Semantic Scholar API Key](https://www.semanticscholar.org/product/api#api-key-form)，限流更宽松
 
 ### 🤔 为什么需要这个扩展？
 
@@ -241,6 +265,8 @@ git pull origin main
 ## 📄 License
 
 MIT License - Feel free to use, modify, and distribute!
+
+Based on [Scholar Citation Monitor](https://github.com/DreamH1gh/Scholar-Citation-Monitor) by [DreamH1gh](https://github.com/DreamH1gh) — the Semantic Scholar module (`s2.js`) and related UI were added in this fork.
 
 ## 🙏 Acknowledgments
 

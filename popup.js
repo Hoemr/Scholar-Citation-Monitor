@@ -33,6 +33,13 @@ async applyLanguage() {
     if (labelShowHistoryText) labelShowHistoryText.textContent = t('label_show_history');
     const labelCitationDetailsText = document.getElementById('labelCitationDetailsText');
     if (labelCitationDetailsText) labelCitationDetailsText.textContent = t('label_citation_details');
+    const labelS2ApiKeyText = document.getElementById('labelS2ApiKeyText');
+    if (labelS2ApiKeyText) labelS2ApiKeyText.textContent = t('label_s2_api_key');
+    const s2ApiKeyInput = document.getElementById('s2ApiKeyInput');
+    if (s2ApiKeyInput) {
+        s2ApiKeyInput.placeholder = t('s2_api_key_hint');
+        s2ApiKeyInput.value = this.s2ApiKey || '';
+    }
     const settingsBtn = document.getElementById('settingsBtn');
     if (settingsBtn) settingsBtn.title = t('label_settings');
     const showHistoryToggle = document.getElementById('showHistoryToggle');
@@ -50,6 +57,7 @@ async applyLanguage() {
 async init() {
     this.showHistory = await this.getShowHistory();
     this.enableCitationDetails = await this.getEnableCitationDetails();
+    this.s2ApiKey = await this.getS2ApiKey();
     await this.applyLanguage();
     this.bindEvents();
     this.startStorageListener();
@@ -158,6 +166,12 @@ startStorageListener() {
             this.updateStatsSummary();
         }
 
+        if (namespace === 'local' && changes.s2Authors) {
+            console.log('检测到 Semantic Scholar 数据更新，刷新界面...');
+            this.loadAuthors();
+            this.updateStatsSummary();
+        }
+
         if (namespace === 'local' && changes.lastUpdateTime) {
             this.updateLastUpdateTime();
         }
@@ -196,6 +210,13 @@ bindEvents() {
         await this.setShowHistory(this.showHistory);
         await this.loadAuthors();
     });
+    const s2ApiKeyInput = document.getElementById('s2ApiKeyInput');
+    if (s2ApiKeyInput) {
+        s2ApiKeyInput.addEventListener('change', async (e) => {
+            this.s2ApiKey = e.target.value.trim();
+            await new Promise((resolve) => chrome.storage.local.set({s2ApiKey: this.s2ApiKey}, resolve));
+        });
+    }
     const citationDetailsToggle = document.getElementById('citationDetailsToggle');
     if (citationDetailsToggle) {
         citationDetailsToggle.addEventListener('change', async (e) => {
@@ -226,6 +247,19 @@ async addAuthor() {
     const url = document.getElementById('authorUrl').value.trim();
     if (!url) return;
 
+    const parsed = this.parseAuthorInput(url);
+
+    if (parsed.type === 's2') {
+        await this.addS2Author(parsed.authorId);
+        document.getElementById('authorUrl').value = '';
+        return;
+    }
+
+    if (parsed.type === 'query') {
+        await this.searchS2Authors(parsed.query);
+        return;
+    }
+
     if (!this.isValidScholarUrl(url)) {
         alert(t('alert_invalid_url'));
         return;
@@ -240,10 +274,11 @@ async addAuthor() {
         // 获取完整的作者信息，包括所有论文
         const authorInfo = await this.fetchCompleteAuthorInfo(url);
         await this.saveAuthor(authorInfo);
-        
+
         await this.setLastUpdateTime();
-        
+
         document.getElementById('authorUrl').value = '';
+        this.clearS2SearchResults();
         await this.loadAuthors();
         this.updateStatsSummary();
         this.updateLastUpdateTime();
@@ -255,6 +290,128 @@ async addAuthor() {
         document.getElementById('addBtn').textContent = t('btn_add');
         document.getElementById('addBtn').disabled = false;
     }
+}
+
+// 一个输入框同时接受三种输入：
+//   1. Google Scholar 主页 URL（user= 参数）-> 走原有 Scholar 抓取
+//   2. Semantic Scholar 主页 URL / 纯数字作者 ID -> 通过官方 API 添加
+//   3. 任意姓名文本 -> 在 Semantic Scholar 中搜索，弹出候选列表
+parseAuthorInput(input) {
+    // S2 主页 URL 两种形态：/author/145183709 或 /author/J.-Weston/145183709（slug 与 ID 之间有斜杠）
+    const s2UrlMatch = input.match(/semanticscholar\.org\/author\/(?:[^/?#]+\/)?(\d{5,})/i);
+    if (s2UrlMatch) return {type: 's2', authorId: s2UrlMatch[1]};
+
+    // 显式前缀：s2:145183709 / s2 145183709
+    const s2Explicit = input.match(/^s2[:\s]*(\d{5,})$/i);
+    if (s2Explicit) return {type: 's2', authorId: s2Explicit[1]};
+
+    // 纯数字长串：S2 作者 ID 是纯数字，Scholar user ID 是 11 位混合字符
+    if (/^\d{6,}$/.test(input)) return {type: 's2', authorId: input};
+
+    if (this.scholarDomains.some(domain => input.includes(domain)) && input.includes('user=')) {
+        return {type: 'gs'};
+    }
+
+    // 非 URL 的裸文本：姓名搜索
+    if (!/^https?:\/\//i.test(input) && !input.includes('/')) {
+        return {type: 'query', query: input};
+    }
+
+    return {type: 'unknown'};
+}
+
+// === Semantic Scholar ===
+async addS2Author(authorId) {
+    const addBtn = document.getElementById('addBtn');
+    const originalText = addBtn.textContent;
+    addBtn.textContent = t('s2_adding');
+    addBtn.disabled = true;
+
+    try {
+        const response = await chrome.runtime.sendMessage({action: 's2AddAuthor', authorId});
+        if (!response || !response.success) {
+            throw new Error((response && response.error) || 'background error');
+        }
+        this.clearS2SearchResults();
+        await this.loadAuthors();
+        this.updateStatsSummary();
+    } catch (error) {
+        if (String(error.message).includes('S2_ALREADY_EXISTS')) {
+            alert(t('s2_already_exists'));
+        } else if (String(error.message).includes('S2_NOT_FOUND')) {
+            alert(t('s2_author_not_found'));
+        } else {
+            alert(t('alert_fetch_failed', {error: error.message}));
+        }
+    } finally {
+        addBtn.textContent = originalText;
+        addBtn.disabled = false;
+    }
+}
+
+async searchS2Authors(query) {
+    this.clearS2SearchResults();
+    const container = document.getElementById('s2SearchResults');
+    if (!container) return;
+    container.innerHTML = `<div class="s2-search-empty">${t('s2_searching')}</div>`;
+    container.style.display = 'block';
+
+    try {
+        const response = await chrome.runtime.sendMessage({action: 's2SearchAuthors', query});
+        if (!response || !response.success) {
+            throw new Error((response && response.error) || 'search failed');
+        }
+        const results = response.results || [];
+        if (results.length === 0) {
+            container.innerHTML = `<div class="s2-search-empty">${t('s2_search_empty')}</div>`;
+            return;
+        }
+        container.innerHTML = `<div class="s2-search-title">${t('s2_search_results_title')}</div>` +
+            results.map(a => `
+                <div class="s2-search-item" data-s2-id="${a.authorId}">
+                    <div class="s2-search-name">${a.name}</div>
+                    <div class="s2-search-meta">
+                        ${(a.affiliations || []).join(', ') || t('unknown_institution')}
+                        · ${t('label_total_citations')} ${(a.citationCount || 0).toLocaleString()}
+                        · ${t('label_h_index')} ${a.hIndex || 0}
+                        · ${a.paperCount || 0} ${t('paper_counter')}
+                    </div>
+                </div>`).join('');
+
+        container.querySelectorAll('.s2-search-item').forEach(item => {
+            item.addEventListener('click', () => {
+                this.addS2Author(item.getAttribute('data-s2-id'));
+            });
+        });
+    } catch (error) {
+        container.innerHTML = `<div class="s2-search-empty">${t('alert_fetch_failed', {error: error.message})}</div>`;
+    }
+}
+
+clearS2SearchResults() {
+    const container = document.getElementById('s2SearchResults');
+    if (container) {
+        container.innerHTML = '';
+        container.style.display = 'none';
+    }
+}
+
+async getS2Authors() {
+    return new Promise((resolve) => {
+        chrome.storage.local.get(['s2Authors'], (result) => resolve(result.s2Authors || []));
+    });
+}
+
+async saveS2Authors(authors) {
+    return new Promise((resolve) => {
+        chrome.storage.local.set({s2Authors: authors}, resolve);
+    });
+}
+
+async getS2ApiKey() {
+    return new Promise((resolve) => {
+        chrome.storage.local.get(['s2ApiKey'], (result) => resolve(result.s2ApiKey || ''));
+    });
 }
 
 isValidScholarUrl(url) {
@@ -626,10 +783,11 @@ checkHasMorePages(html) {
     return hasTable && !hasEndMarker;
 }
 
-// 手动刷新：委托给 background 走完整 autoRefresh 流程（含 enrichCitationDetails）
+// 手动刷新：委托给 background 走完整 autoRefresh 流程（含 enrichCitationDetails + S2 刷新）
 async refreshAll() {
     const authors = await this.getStoredAuthors();
-    if (authors.length === 0) {
+    const s2Authors = await this.getS2Authors();
+    if (authors.length === 0 && s2Authors.length === 0) {
         alert(t('alert_no_authors'));
         return;
     }
@@ -854,6 +1012,221 @@ renderNoCitersReason(change, paperMap, author) {
         } else {
             reason = t('reason_no_new');
         }
+    }
+    return t('no_citers_status', {reason});
+}
+
+// === Semantic Scholar 作者卡片 ===
+renderS2AuthorCard(author) {
+    const showAsNew = author.hasNewCitations && this.isChangeRecent(author.changeTimestamp);
+    const citationChange = author.previousCitations !== undefined ?
+        author.totalCitations - author.previousCitations : 0;
+    const totalCitations = author.totalCitations || 0;
+    const hIndex = author.hIndex || 0;
+    const paperCount = author.paperCount || (author.papers || []).length;
+
+    const shouldShowPaperChanges = author.paperChanges &&
+        author.paperChanges.length > 0 &&
+        this.isChangeRecent(author.changeTimestamp);
+
+    return `
+        <div class="author-item ${showAsNew ? 'has-new' : ''}">
+            ${showAsNew ? '<div class="new-badge">NEW</div>' : ''}
+            <div class="author-header">
+                <div class="author-name-link" data-url="${author.url}" title="${t('view_details')}">${author.name}<span class="s2-badge">Semantic Scholar</span></div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    ${shouldShowPaperChanges ?
+                        `<button class="paper-changes-btn s2-paper-changes-btn" data-s2-id="${author.authorId}">${t('paper_changes_btn', {count: author.paperChanges.length})}</button>` : ''}
+                    ${showAsNew ? `<button class="mark-read-btn s2-mark-read-btn" data-s2-id="${author.authorId}">${t('mark_read')}</button>` : ''}
+                    <button class="delete-btn s2-delete-btn" data-s2-id="${author.authorId}">×</button>
+                </div>
+            </div>
+            <div class="author-info">
+                <div><strong>${t('label_institution')}</strong> ${author.affiliation || t('unknown_institution')}</div>
+                <div><strong>${t('label_total_papers')}</strong> <span style="color: #1a73e8; font-weight: bold;">${paperCount}</span> ${t('paper_counter')}</div>
+                ${author.lastError ? `<div class="s2-error">⚠ ${author.lastError}</div>` : ''}
+            </div>
+            <div class="citation-info">
+                <div class="citation-item">
+                    <div class="citation-label">${t('label_total_citations')}</div>
+                    <div class="citation-value">${totalCitations.toLocaleString()}</div>
+                    ${citationChange > 0 ? `<div class="citation-change">+${citationChange}</div>` : ''}
+                </div>
+                <div class="citation-item">
+                    <div class="citation-label">${t('label_h_index')}</div>
+                    <div class="citation-value">${hIndex}</div>
+                </div>
+                <div class="citation-item">
+                    <div class="citation-label">${t('label_total_papers')}</div>
+                    <div class="citation-value">${paperCount}</div>
+                </div>
+            </div>
+            ${this.showHistory ? `
+            <div class="history-section">
+                <div class="history-header s2-history-header" data-s2-id="${author.authorId}">
+                    <span>${t('history_title')}</span>
+                    <span class="history-arrow">${author.historyExpanded ? '▼' : '▶'}</span>
+                </div>
+                ${author.historyExpanded ? `
+                    <div class="history-content">
+                        <div class="history-range">
+                            ${[7, 30, 90, 365, 'all'].map(r => `
+                                <button class="range-btn s2-range-btn ${(author.historyRange || 30) === r ? 'active' : ''}"
+                                        data-s2-id="${author.authorId}" data-range="${r}">
+                                    ${r === 365 ? '1Y' : r === 'all' ? 'All' : r + 'D'}
+                                </button>
+                            `).join('')}
+                        </div>
+                        ${this.renderSparkline(author.history, author.historyRange || 30)}
+                    </div>
+                ` : ''}
+            </div>
+            ` : ''}
+            <div class="last-updated">
+                ${t('last_updated')}${new Date(author.lastUpdated || Date.now()).toLocaleString(I18n.getLocale())}
+            </div>
+        </div>
+    `;
+}
+
+async toggleS2History(authorId) {
+    const authors = await this.getS2Authors();
+    const author = authors.find(a => a.authorId === authorId);
+    if (!author) return;
+    author.historyExpanded = !author.historyExpanded;
+    await this.saveS2Authors(authors);
+    await this.loadAuthors();
+}
+
+async setS2HistoryRange(authorId, range) {
+    const authors = await this.getS2Authors();
+    const author = authors.find(a => a.authorId === authorId);
+    if (!author) return;
+    author.historyRange = range;
+    await this.saveS2Authors(authors);
+    await this.loadAuthors();
+}
+
+async markS2AsRead(authorId) {
+    const authors = await this.getS2Authors();
+    const author = authors.find(a => a.authorId === authorId);
+    if (author) {
+        author.hasNewCitations = false;
+        delete author.previousCitations;
+        delete author.changeTimestamp;
+        delete author.paperChanges;
+        await this.saveS2Authors(authors);
+        await this.loadAuthors();
+        this.updateStatsSummary();
+    }
+}
+
+async deleteS2Author(authorId) {
+    if (!confirm(t('confirm_delete'))) return;
+    const authors = await this.getS2Authors();
+    await this.saveS2Authors(authors.filter(a => a.authorId !== authorId));
+    await this.loadAuthors();
+    this.updateStatsSummary();
+}
+
+// === Semantic Scholar 论文变化弹窗 ===
+async showS2PaperChanges(authorId) {
+    const authors = await this.getS2Authors();
+    const author = authors.find(a => a.authorId === authorId);
+
+    if (!author || !author.paperChanges || author.paperChanges.length === 0) {
+        alert(t('alert_no_paper_changes'));
+        return;
+    }
+
+    const modal = document.createElement('div');
+    modal.className = 'paper-changes-modal';
+    modal.innerHTML = `
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>${t('s2_paper_changes_title', {name: author.name, count: author.paperChanges.length})}</h3>
+                <button class="close-btn">×</button>
+            </div>
+            <div class="modal-body">
+                ${author.paperChanges.map(change => {
+                    const newCiters = change.newCiters || [];
+                    const hasData = newCiters.length > 0;
+                    return `
+                        <div class="paper-change-item">
+                            <div class="paper-title${change.link ? ' is-link' : ''}" ${change.link ? `data-link="${change.link}" title="${t('view_details')}"` : ''}>${change.title}</div>
+                            <div class="paper-info">
+                                <span class="paper-year">${change.year || ''}</span>
+                                <span class="citation-change ${change.change > 0 ? 'positive' : 'negative'}">
+                                    ${change.oldCitations} → ${change.newCitations} (${change.change > 0 ? '+' : ''}${change.change})
+                                </span>
+                            </div>
+                            ${hasData ? `
+                                <div class="new-citers-block">
+                                    <div class="new-citers-header">
+                                        <span>${t('new_citers_toggle', {count: newCiters.length})}</span>
+                                        <span class="arrow">▶</span>
+                                    </div>
+                                    <div class="new-citers-list" style="display:none;">
+                                        ${newCiters.map(c => `
+                                            <div class="citer-item">
+                                                ${c.link ? `<a href="${c.link}" class="citer-title" data-link="${c.link}">${c.title}</a>` : `<span class="citer-title">${c.title}</span>`}
+                                                <div class="citer-meta">${[c.authors, c.year].filter(Boolean).join(' · ')}</div>
+                                                ${c.venue ? `<div class="s2-venue">${c.venue}</div>` : ''}
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                </div>
+                            ` : `
+                                <div class="new-citers-empty">${this.renderS2NoCitersReason(change)}</div>
+                            `}
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        </div>
+    `;
+
+    modal.querySelector('.close-btn').addEventListener('click', () => {
+        modal.remove();
+    });
+
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            modal.remove();
+        }
+    });
+
+    modal.querySelectorAll('.new-citers-header').forEach(header => {
+        header.addEventListener('click', () => {
+            const list = header.nextElementSibling;
+            if (!list) return;
+            const expanded = list.style.display !== 'none';
+            list.style.display = expanded ? 'none' : 'block';
+            header.classList.toggle('expanded', !expanded);
+        });
+    });
+
+    modal.querySelectorAll('[data-link]').forEach(el => {
+        el.addEventListener('click', (e) => {
+            e.preventDefault();
+            const url = el.getAttribute('data-link');
+            if (url) chrome.tabs.create({ url });
+        });
+    });
+
+    document.body.appendChild(modal);
+}
+
+renderS2NoCitersReason(change) {
+    let reason;
+    if (change.detailSkipped === 'too_many') {
+        reason = t('s2_reason_too_many');
+    } else if (change.detailSkipped === 'not_found') {
+        reason = t('s2_reason_not_found');
+    } else if (change.fetchFailed) {
+        reason = t('s2_reason_fetch_failed');
+    } else {
+        reason = t('s2_reason_no_new');
     }
     return t('no_citers_status', {reason});
 }
@@ -1235,9 +1608,10 @@ async deleteAuthor(userId) {
 
 async loadAuthors() {
     const authors = await this.getStoredAuthors();
+    const s2Authors = await this.getS2Authors();
     const container = document.getElementById('authorsList');
-    
-    if (authors.length === 0) {
+
+    if (authors.length === 0 && s2Authors.length === 0) {
         container.innerHTML = `<div class="empty-state">${t('empty_state')}</div>`;
         return;
     }
@@ -1270,7 +1644,7 @@ async loadAuthors() {
 
     container.innerHTML = authors.map(author => {
         const showAsNew = author.hasNewCitations && this.isChangeRecent(author.changeTimestamp);
-        const citationChange = author.previousCitations !== undefined ? 
+        const citationChange = author.previousCitations !== undefined ?
             author.totalCitations - author.previousCitations : 0;
         
         // 安全地处理可能为undefined的数值
@@ -1352,37 +1726,37 @@ async loadAuthors() {
                 </div>
             </div>
         `;
-    }).join('');
+    }).join('') + s2Authors.map(author => this.renderS2AuthorCard(author)).join('');
 
     container.querySelectorAll('.author-name-link').forEach(link => {
         link.addEventListener('click', (e) => {
-            const url = e.target.getAttribute('data-url');
+            const url = e.currentTarget.getAttribute('data-url');
             this.openAuthorPage(url);
         });
     });
 
-    container.querySelectorAll('.delete-btn').forEach(btn => {
+    container.querySelectorAll('.delete-btn:not(.s2-delete-btn)').forEach(btn => {
         btn.addEventListener('click', (e) => {
             const userId = e.target.getAttribute('data-user-id');
             this.deleteAuthor(userId);
         });
     });
 
-    container.querySelectorAll('.mark-read-btn').forEach(btn => {
+    container.querySelectorAll('.mark-read-btn:not(.s2-mark-read-btn)').forEach(btn => {
         btn.addEventListener('click', (e) => {
             const userId = e.target.getAttribute('data-user-id');
             this.markAsRead(userId);
         });
     });
 
-    container.querySelectorAll('.history-header').forEach(header => {
+    container.querySelectorAll('.history-header:not(.s2-history-header)').forEach(header => {
         header.addEventListener('click', (e) => {
             const userId = e.currentTarget.getAttribute('data-user-id');
             this.toggleHistory(userId);
         });
     });
 
-    container.querySelectorAll('.range-btn').forEach(btn => {
+    container.querySelectorAll('.range-btn:not(.s2-range-btn)').forEach(btn => {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
             const userId = e.currentTarget.getAttribute('data-user-id');
@@ -1392,10 +1766,43 @@ async loadAuthors() {
         });
     });
 
-    container.querySelectorAll('.paper-changes-btn').forEach(btn => {
+    container.querySelectorAll('.paper-changes-btn:not(.s2-paper-changes-btn)').forEach(btn => {
         btn.addEventListener('click', (e) => {
             const userId = e.target.getAttribute('data-user-id');
             this.showPaperChanges(userId);
+        });
+    });
+
+    container.querySelectorAll('.s2-delete-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            this.deleteS2Author(e.currentTarget.getAttribute('data-s2-id'));
+        });
+    });
+
+    container.querySelectorAll('.s2-mark-read-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            this.markS2AsRead(e.currentTarget.getAttribute('data-s2-id'));
+        });
+    });
+
+    container.querySelectorAll('.s2-history-header').forEach(header => {
+        header.addEventListener('click', (e) => {
+            this.toggleS2History(e.currentTarget.getAttribute('data-s2-id'));
+        });
+    });
+
+    container.querySelectorAll('.s2-range-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const raw = e.currentTarget.getAttribute('data-range');
+            const range = raw === 'all' ? 'all' : parseInt(raw);
+            this.setS2HistoryRange(e.currentTarget.getAttribute('data-s2-id'), range);
+        });
+    });
+
+    container.querySelectorAll('.s2-paper-changes-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            this.showS2PaperChanges(e.currentTarget.getAttribute('data-s2-id'));
         });
     });
 
@@ -1450,25 +1857,34 @@ async updateLastUpdateTime() {
 
 async updateStatsSummary() {
     const authors = await this.getStoredAuthors();
-    
-    if (authors.length === 0) {
+    const s2Authors = await this.getS2Authors();
+
+    if (authors.length === 0 && s2Authors.length === 0) {
         document.getElementById('statsSummary').textContent = '';
         return;
     }
-    
+
     const totalAuthors = authors.length;
     const totalCitations = authors.reduce((sum, author) => sum + author.totalCitations, 0);
     const totalPapers = authors.reduce((sum, author) => sum + (author.totalPapers || author.papers?.length || 0), 0);
-    const newChangesCount = authors.filter(author => 
+    const newChangesCount = authors.filter(author =>
         author.hasNewCitations && this.isChangeRecent(author.changeTimestamp)
     ).length;
-    
-    const summaryText = t('stats_summary', {
+
+    let summaryText = t('stats_summary', {
         totalAuthors,
         totalPapers: totalPapers.toLocaleString(),
         totalCitations: totalCitations.toLocaleString()
     }) + (newChangesCount > 0 ? ' ' + t('stats_new_changes', {count: newChangesCount}) : '');
-    
+
+    if (s2Authors.length > 0) {
+        const s2Total = s2Authors.reduce((sum, a) => sum + (a.totalCitations || 0), 0);
+        summaryText += ' ' + t('stats_summary_s2', {
+            count: s2Authors.length,
+            totalCitations: s2Total.toLocaleString()
+        });
+    }
+
     document.getElementById('statsSummary').textContent = summaryText;
 }
 }

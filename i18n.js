@@ -21,7 +21,7 @@ const I18n = {
             last_update_never_short: '最后更新: 从未',
             no_stats: '暂无统计数据',
             loading: '正在加载...',
-            input_placeholder: '输入 Google Scholar 作者页面 URL',
+            input_placeholder: 'Google Scholar / Semantic Scholar 主页 URL，或输入姓名搜索',
 
             // Buttons
             btn_add: '添加',
@@ -50,7 +50,7 @@ const I18n = {
 
             // Author card
             paper_changes_btn: '论文变化 ({count})',
-            empty_state: '暂无作者数据<br><small>请在上方输入Google Scholar作者页面URL</small>',
+            empty_state: '暂无作者数据<br><small>粘贴 Google Scholar / Semantic Scholar 主页 URL，或输入姓名搜索</small>',
 
             // Stats summary
             stats_summary: '监控 {totalAuthors} 位学者，共 {totalPapers} 篇论文，总引用 {totalCitations} 次',
@@ -61,7 +61,7 @@ const I18n = {
             view_details: '查看详情',
 
             // Alerts & confirms
-            alert_invalid_url: '请输入有效的Google Scholar作者页面URL',
+            alert_invalid_url: '无法识别的输入：请粘贴 Google Scholar / Semantic Scholar 主页 URL，或输入姓名搜索',
             alert_fetch_failed: '获取作者信息失败: {error}',
             alert_no_authors: '没有要刷新的作者',
             alert_no_paper_changes: '该作者暂无论文引用变化记录',
@@ -113,7 +113,27 @@ const I18n = {
             anticrawl_body: '扩展在抓取引用列表时被 Scholar 拦截。请在浏览器中打开下方链接，完成机器人验证后再次刷新——验证通过后扩展会自动恢复抓取。',
             anticrawl_open: '打开引用列表页',
             anticrawl_verified: '已验证，立即重试',
-            anticrawl_dismiss: '关闭'
+            anticrawl_dismiss: '关闭',
+
+            // === Semantic Scholar module ===
+            s2_adding: '添加中...(通过官方 API 获取)',
+            s2_already_exists: '该 Semantic Scholar 作者已在监控列表中',
+            s2_author_not_found: '未找到该 Semantic Scholar 作者，请确认作者 ID',
+            s2_searching: '搜索中...',
+            s2_search_results_title: '在 Semantic Scholar 中找到以下作者，点击添加：',
+            s2_search_empty: '未找到匹配的 Semantic Scholar 作者',
+            s2_paper_changes_title: '{name} - Semantic Scholar 引用变化 ({count} 篇)',
+            s2_reason_too_many: '引用数超过 3000，仅统计数量变化',
+            s2_reason_not_found: '论文在 Semantic Scholar 中已被移除',
+            s2_reason_fetch_failed: '本次获取失败（可能限流），下次刷新自动重试',
+            s2_reason_no_new: '本次无新增',
+            s2_notify_title: '🎉 Semantic Scholar 引用更新',
+            s2_notify_single: '{name} 的 Semantic Scholar 总引用从 {old} 增加到 {new} (+{increase})',
+            s2_notify_papers: '其中 {count} 篇论文有新增引用，新增引用论文 {citerCount} 篇',
+            s2_notify_multi: '{count} 位学者的 Semantic Scholar 引用有更新',
+            label_s2_api_key: 'S2 API Key（可选）',
+            s2_api_key_hint: '免费申请后限流更宽松',
+            stats_summary_s2: '（另监控 Semantic Scholar：{count} 位学者，总引用 {totalCitations} 次）'
         },
 
         // ========== English (en) ==========
@@ -122,7 +142,7 @@ const I18n = {
             last_update_never_short: 'Last update: Never',
             no_stats: 'No statistics available',
             loading: 'Loading...',
-            input_placeholder: 'Enter Google Scholar author page URL',
+            input_placeholder: 'Google Scholar / Semantic Scholar profile URL, or a name to search',
 
             btn_add: 'Add',
             btn_refresh: 'Refresh',
@@ -146,7 +166,7 @@ const I18n = {
             last_updated: 'Last updated: ',
 
             paper_changes_btn: 'Changes ({count})',
-            empty_state: 'No author data<br><small>Please enter a Google Scholar author page URL above</small>',
+            empty_state: 'No author data<br><small>Paste a Google Scholar / Semantic Scholar profile URL, or type a name to search</small>',
 
             stats_summary: 'Monitoring {totalAuthors} scholars, {totalPapers} papers, {totalCitations} total citations',
             stats_new_changes: '({count} with new changes)',
@@ -154,7 +174,7 @@ const I18n = {
             paper_changes_title: '{name} - Paper Citation Changes ({count} papers)',
             view_details: 'View Details',
 
-            alert_invalid_url: 'Please enter a valid Google Scholar author page URL',
+            alert_invalid_url: 'Unrecognized input: paste a Google Scholar / Semantic Scholar profile URL, or type a name to search',
             alert_fetch_failed: 'Failed to fetch author info: {error}',
             alert_no_authors: 'No authors to refresh',
             alert_no_paper_changes: 'No paper citation changes for this author',
@@ -205,7 +225,27 @@ const I18n = {
             anticrawl_body: 'The extension was blocked by Scholar while fetching the citation list. Open the link below, pass the robot check, then refresh — once verified, the extension resumes automatically.',
             anticrawl_open: 'Open citation list',
             anticrawl_verified: 'Verified, retry now',
-            anticrawl_dismiss: 'Dismiss'
+            anticrawl_dismiss: 'Dismiss',
+
+            // === Semantic Scholar module ===
+            s2_adding: 'Adding... (via official API)',
+            s2_already_exists: 'This Semantic Scholar author is already being monitored',
+            s2_author_not_found: 'Semantic Scholar author not found, please check the author ID',
+            s2_searching: 'Searching...',
+            s2_search_results_title: 'Found on Semantic Scholar — click to add:',
+            s2_search_empty: 'No matching Semantic Scholar authors found',
+            s2_paper_changes_title: '{name} - Semantic Scholar citation changes ({count} papers)',
+            s2_reason_too_many: 'Over 3000 citations — tracking count changes only',
+            s2_reason_not_found: 'Paper has been removed from Semantic Scholar',
+            s2_reason_fetch_failed: 'Fetch failed this cycle (possibly rate-limited), will retry next refresh',
+            s2_reason_no_new: 'No new citations this cycle',
+            s2_notify_title: '🎉 Semantic Scholar Citations Updated',
+            s2_notify_single: '{name} Semantic Scholar citations increased from {old} to {new} (+{increase})',
+            s2_notify_papers: '{count} papers gained citations ({citerCount} new citing papers)',
+            s2_notify_multi: '{count} authors have new Semantic Scholar citations',
+            label_s2_api_key: 'S2 API Key (optional)',
+            s2_api_key_hint: 'A free key gets more relaxed rate limits',
+            stats_summary_s2: '(+ Semantic Scholar: {count} authors, {totalCitations} total citations)'
         },
 
         // ========== German (de) ==========
@@ -763,7 +803,7 @@ const I18n = {
 
     t(key, params = {}) {
         const langStrings = this.translations[this.currentLang] || this.translations['zh'];
-        let text = langStrings[key] || this.translations['zh'][key] || key;
+        let text = langStrings[key] || this.translations['en'][key] || this.translations['zh'][key] || key;
         Object.keys(params).forEach(param => {
             text = text.replace(new RegExp('\\{' + param + '\\}', 'g'), params[param]);
         });
