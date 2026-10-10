@@ -40,6 +40,16 @@ async applyLanguage() {
         s2ApiKeyInput.placeholder = t('s2_api_key_hint');
         s2ApiKeyInput.value = this.s2ApiKey || '';
     }
+    const s2ApiKeyLink = document.getElementById('s2ApiKeyLink');
+    if (s2ApiKeyLink) s2ApiKeyLink.textContent = t('s2_api_key_link');
+    const labelBackupText = document.getElementById('labelBackupText');
+    if (labelBackupText) labelBackupText.textContent = t('label_backup');
+    const exportBtn = document.getElementById('exportBtn');
+    if (exportBtn) exportBtn.textContent = t('btn_export');
+    const importBtn = document.getElementById('importBtn');
+    if (importBtn) importBtn.textContent = t('btn_import');
+    const backupTextarea = document.getElementById('backupTextarea');
+    if (backupTextarea) backupTextarea.placeholder = t('backup_hint');
     const settingsBtn = document.getElementById('settingsBtn');
     if (settingsBtn) settingsBtn.title = t('label_settings');
     const showHistoryToggle = document.getElementById('showHistoryToggle');
@@ -212,10 +222,14 @@ bindEvents() {
     });
     const s2ApiKeyInput = document.getElementById('s2ApiKeyInput');
     if (s2ApiKeyInput) {
-        s2ApiKeyInput.addEventListener('change', async (e) => {
+        // 只监听 change 不够：popup 关闭时输入框被销毁，blur/change 不一定触发，
+        // 会出现「粘贴 key 后直接关掉弹窗 → key 没存上」。因此 input 也实时保存。
+        const saveS2ApiKey = async (e) => {
             this.s2ApiKey = e.target.value.trim();
             await new Promise((resolve) => chrome.storage.local.set({s2ApiKey: this.s2ApiKey}, resolve));
-        });
+        };
+        s2ApiKeyInput.addEventListener('input', saveS2ApiKey);
+        s2ApiKeyInput.addEventListener('change', saveS2ApiKey);
     }
     const citationDetailsToggle = document.getElementById('citationDetailsToggle');
     if (citationDetailsToggle) {
@@ -241,6 +255,7 @@ bindEvents() {
             settingsBtn.classList.remove('active');
         }
     });
+    this.bindBackupEvents();
 }
 
 async addAuthor() {
@@ -1886,6 +1901,203 @@ async updateStatsSummary() {
     }
 
     document.getElementById('statsSummary').textContent = summaryText;
+}
+
+// ============================================================
+// 数据备份 / 恢复
+// chrome.storage.local 是按扩展 ID 隔离的：store 版保平安 ID 由商店签名决定，
+// 而未打包版 ID = 安装目录绝对路径的哈希。所以「从商店版换成未打包版」或
+// 「换文件夹路径」都会得到新 ID，旧数据不会自动出现，必须导出后导入。
+// 这里同时兼容本扩展的备份格式和旧版 get(null) 的原始 dump。
+// ============================================================
+
+bindBackupEvents() {
+    const exportBtn = document.getElementById('exportBtn');
+    if (exportBtn) exportBtn.addEventListener('click', () => this.exportBackup());
+    const importBtn = document.getElementById('importBtn');
+    if (importBtn) importBtn.addEventListener('click', () => this.importBackup());
+
+    const textarea = document.getElementById('backupTextarea');
+    if (!textarea) return;
+
+    ['dragenter', 'dragover'].forEach((evt) => {
+        textarea.addEventListener(evt, (e) => {
+            e.preventDefault();
+            textarea.classList.add('drop-active');
+        });
+    });
+    ['dragleave', 'drop'].forEach((evt) => {
+        textarea.addEventListener(evt, () => textarea.classList.remove('drop-active'));
+    });
+    textarea.addEventListener('drop', (e) => {
+        e.preventDefault();
+        const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => { textarea.value = String(reader.result || ''); };
+        reader.readAsText(file);
+    });
+}
+
+setBackupStatus(message, type = '') {
+    const el = document.getElementById('backupStatus');
+    if (!el) return;
+    el.textContent = message || '';
+    el.className = 'backup-status' + (type ? ' ' + type : '');
+}
+
+// 导出：只带数据与显示偏好，默认不含 s2ApiKey（密钥不该落到明文文件里）
+async exportBackup() {
+    const keys = ['authors', 's2Authors', 'showHistory', 'enableCitationDetails',
+                  'language', 'lastUpdateTime', 'refreshLogs'];
+    const data = await new Promise((resolve) => chrome.storage.local.get(keys, resolve));
+    const payload = {
+        format: 'scholar-citation-monitor-backup',
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        data
+    };
+    const json = JSON.stringify(payload, null, 2);
+
+    try {
+        const blob = new Blob([json], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'scholar-citation-monitor-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
+    } catch (e) {
+        console.warn('导出下载失败，已把内容写入文本框供手动复制:', e);
+    }
+
+    // 兜底：内容同时放进文本框，即使下载被拦截也能手动复制
+    const textarea = document.getElementById('backupTextarea');
+    if (textarea) textarea.value = json;
+    this.setBackupStatus(t('backup_exported', {
+        count: (data.authors || []).length + (data.s2Authors || []).length
+    }), 'ok');
+}
+
+// 兼容两种输入：
+//   1. 本扩展导出的备份 {format, version, data:{...}}
+//   2. 旧版扩展控制台 chrome.storage.local.get(null) 的原始 dump {authors, ...}
+normalizeBackup(raw) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+    if (raw.data && typeof raw.data === 'object' && !Array.isArray(raw.data)) {
+        return raw.data;
+    }
+    const known = ['authors', 's2Authors', 's2ApiKey', 'showHistory', 'enableCitationDetails',
+                   'language', 'lastUpdateTime', 'refreshLogs'];
+    const picked = {};
+    known.forEach((k) => { if (raw[k] !== undefined) picked[k] = raw[k]; });
+    return Object.keys(picked).length > 0 ? picked : null;
+}
+
+// 引用历史按 timestamp 合并去重（同一时间点保留引用数较大的那条），再按时间升序
+mergeCitationHistory(...lists) {
+    const byTimestamp = new Map();
+    lists.forEach((list) => {
+        (Array.isArray(list) ? list : []).forEach((point) => {
+            if (!point || !point.timestamp) return;
+            const key = String(point.timestamp);
+            const prev = byTimestamp.get(key);
+            if (!prev || (point.citations || 0) >= (prev.citations || 0)) {
+                byTimestamp.set(key, point);
+            }
+        });
+    });
+    return Array.from(byTimestamp.values())
+        .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+}
+
+// 按身份键合并（Scholar: userId / Semantic Scholar: authorId）。
+// 已存在的作者保留本地字段（本地是刚抓到的更新数据），只把历史曲线取并集。
+mergeAuthorList(localList, incomingList, idField) {
+    const result = Array.isArray(localList) ? localList.slice() : [];
+    const indexById = new Map();
+    result.forEach((author, i) => {
+        if (author && author[idField] !== undefined && author[idField] !== null) {
+            indexById.set(String(author[idField]), i);
+        }
+    });
+
+    let added = 0;
+    (Array.isArray(incomingList) ? incomingList : []).forEach((incoming) => {
+        if (!incoming || incoming[idField] === undefined || incoming[idField] === null) return;
+        const id = String(incoming[idField]);
+        if (!indexById.has(id)) {
+            result.push(incoming);
+            indexById.set(id, result.length - 1);
+            added++;
+            return;
+        }
+        const at = indexById.get(id);
+        const merged = { ...incoming, ...result[at] };
+        merged.history = this.mergeCitationHistory(incoming.history, result[at].history);
+        result[at] = merged;
+    });
+
+    return { list: result, added };
+}
+
+async importBackup() {
+    const textarea = document.getElementById('backupTextarea');
+    const text = textarea ? textarea.value.trim() : '';
+    if (!text) {
+        this.setBackupStatus(t('backup_empty'), 'error');
+        return;
+    }
+
+    let parsed;
+    try {
+        parsed = JSON.parse(text);
+    } catch (e) {
+        this.setBackupStatus(t('backup_bad_format'), 'error');
+        return;
+    }
+
+    const data = this.normalizeBackup(parsed);
+    if (!data) {
+        this.setBackupStatus(t('backup_bad_format'), 'error');
+        return;
+    }
+
+    try {
+        const scholarResult = this.mergeAuthorList(
+            await this.getStoredAuthors(), data.authors, 'userId');
+        const s2Result = this.mergeAuthorList(
+            await this.getS2Authors(), data.s2Authors, 'authorId');
+
+        const toWrite = { authors: scholarResult.list, s2Authors: s2Result.list };
+        ['showHistory', 'enableCitationDetails', 'language', 'lastUpdateTime', 'refreshLogs']
+            .forEach((k) => {
+                if (data[k] !== undefined && data[k] !== null) toWrite[k] = data[k];
+            });
+        // 旧版原始 dump 若带 API Key 则一并恢复；本扩展的备份格式不含该字段
+        if (typeof data.s2ApiKey === 'string' && data.s2ApiKey) {
+            toWrite.s2ApiKey = data.s2ApiKey;
+            this.s2ApiKey = data.s2ApiKey;
+        }
+
+        await new Promise((resolve) => chrome.storage.local.set(toWrite, resolve));
+
+        await this.applyLanguage();
+        this.updateStatsSummary();
+        this.updateLastUpdateTime();
+
+        this.setBackupStatus(t('backup_done', {
+            gs: scholarResult.added,
+            gsTotal: scholarResult.list.length,
+            s2: s2Result.added,
+            s2Total: s2Result.list.length
+        }), 'ok');
+    } catch (e) {
+        console.error('导入失败:', e);
+        this.setBackupStatus(t('backup_bad_format'), 'error');
+    }
 }
 }
 
