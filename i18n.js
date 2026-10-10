@@ -133,6 +133,15 @@ const I18n = {
             s2_notify_multi: '{count} 位学者的 Semantic Scholar 引用有更新',
             label_s2_api_key: 'S2 API Key（可选）',
             s2_api_key_hint: '免费申请后限流更宽松',
+            s2_api_key_link: '免费申请 API Key →',
+            label_backup: '数据备份与迁移',
+            btn_export: '导出备份',
+            btn_import: '导入备份',
+            backup_hint: '把旧版扩展的数据粘贴到这里，或直接把 .json 文件拖进来，然后点「导入备份」。',
+            backup_empty: '请先粘贴备份内容或拖入 .json 文件',
+            backup_bad_format: '导入失败：内容不是有效的备份数据',
+            backup_done: '导入完成：Scholar 学者 +{gs}（共 {gsTotal}），S2 学者 +{s2}（共 {s2Total}）',
+            backup_exported: '已导出 {count} 位学者的数据（内容也已填入下方文本框，可手动复制）',
             stats_summary_s2: '（另监控 Semantic Scholar：{count} 位学者，总引用 {totalCitations} 次）'
         },
 
@@ -245,6 +254,15 @@ const I18n = {
             s2_notify_multi: '{count} authors have new Semantic Scholar citations',
             label_s2_api_key: 'S2 API Key (optional)',
             s2_api_key_hint: 'A free key gets more relaxed rate limits',
+            s2_api_key_link: 'Get a free API key →',
+            label_backup: 'Backup & migration',
+            btn_export: 'Export backup',
+            btn_import: 'Import backup',
+            backup_hint: 'Paste the old extension\'s data here (or drop a .json file), then click "Import backup".',
+            backup_empty: 'Paste backup content or drop a .json file first',
+            backup_bad_format: 'Import failed: not valid backup data',
+            backup_done: 'Imported: Scholar +{gs} of {gsTotal}, S2 +{s2} of {s2Total}',
+            backup_exported: 'Exported {count} authors (also placed in the text box below for manual copy)',
             stats_summary_s2: '(+ Semantic Scholar: {count} authors, {totalCitations} total citations)'
         },
 
