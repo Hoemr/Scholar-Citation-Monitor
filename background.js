@@ -1,5 +1,5 @@
 // background.js - 修复版本，解决重复通知问题（持久化通知去重数据）
-importScripts('i18n.js');
+importScripts('i18n.js', 's2.js');
 class ScholarBackgroundService {
 constructor() {
     this.scholarDomains = [
@@ -33,6 +33,8 @@ constructor() {
     this.notificationCooldown = 5 * 60 * 1000; // 5分钟冷却时间（常量）
     
     console.log('🚀 Scholar Background Service 启动');
+    this.s2Service = new S2BackgroundService();
+    this.s2Service.init();
     this.init();
 }
 
@@ -183,6 +185,18 @@ async handleMessage(request, sender) {
         case 'clearLogs':
             await this.saveRefreshLogs([]);
             return {success: true, message: '日志已清除'};
+
+        case 's2SearchAuthors':
+            return {
+                success: true,
+                results: await this.s2Service.searchAuthors(request.query)
+            };
+
+        case 's2AddAuthor':
+            return {
+                success: true,
+                author: await this.s2Service.addAuthor(request.authorId)
+            };
             
         case 'testAlarm':
             return await this.testAlarmFunctionality();
@@ -313,6 +327,14 @@ async executeAutoRefresh(enableNotifications = true) {
 
     try {
         const changes = await this.autoRefreshAll();
+
+        // Semantic Scholar 模块走官方 API，与 Scholar 抓取互不影响；
+        // 通知由 s2Service 自行发送（独立去重），此处只负责触发
+        try {
+            await this.s2Service.refreshAllAuthors(enableNotifications);
+        } catch (s2Error) {
+            console.error('❌ Semantic Scholar 刷新失败:', s2Error.message);
+        }
 
         const endTime = new Date();
         const duration = endTime - startTime;

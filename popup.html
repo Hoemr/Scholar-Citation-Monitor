@@ -757,6 +757,85 @@
     background: rgba(0, 0, 0, 0.08);
     color: #424242;
 }
+
+/* === Semantic Scholar === */
+.s2-badge {
+    display: inline-block;
+    background: #4657ce;
+    color: white;
+    font-size: 9px;
+    padding: 1px 6px;
+    border-radius: 8px;
+    vertical-align: middle;
+    margin-left: 6px;
+    font-weight: 600;
+}
+.s2-search-results {
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 10px;
+    margin-bottom: 12px;
+    background: #fafaff;
+}
+.s2-search-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 8px;
+}
+.s2-search-item {
+    padding: 8px;
+    border: 1px solid #e8e8f5;
+    border-radius: 6px;
+    margin-bottom: 6px;
+    cursor: pointer;
+    background: white;
+    transition: all 0.15s ease;
+}
+.s2-search-item:hover {
+    border-color: #4657ce;
+    background: #f5f6ff;
+}
+.s2-search-name {
+    font-size: 13px;
+    font-weight: bold;
+    color: #1a1a2e;
+    margin-bottom: 2px;
+}
+.s2-search-meta {
+    font-size: 11px;
+    color: #666;
+    line-height: 1.4;
+}
+.s2-search-empty {
+    font-size: 12px;
+    color: #666;
+    text-align: center;
+    padding: 8px 0;
+}
+.s2-api-key-input {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 12px;
+    box-sizing: border-box;
+    margin-top: 4px;
+}
+.s2-api-key-input:focus {
+    outline: none;
+    border-color: #4657ce;
+}
+.s2-error {
+    font-size: 11px;
+    color: #d32f2f;
+    margin-top: 4px;
+}
+.s2-venue {
+    color: #888;
+    font-size: 11px;
+    margin-top: 2px;
+}
 </style>
 </head>
 <body>
@@ -795,6 +874,10 @@
                   <span class="toggle-slider"></span>
               </label>
           </div>
+          <div class="settings-row" style="flex-direction: column; align-items: stretch;">
+              <span id="labelS2ApiKeyText" style="margin-bottom: 2px;"></span>
+              <input type="password" id="s2ApiKeyInput" class="s2-api-key-input" placeholder="" autocomplete="off">
+          </div>
       </div>
       <div class="stats-summary" id="statsSummary">暂无统计数据</div>
   </div>
@@ -806,6 +889,8 @@
       <button id="addBtn">添加</button>
       <button id="refreshBtn" class="refresh-btn">刷新</button>
   </div>
+
+  <div id="s2SearchResults" class="s2-search-results" style="display:none;"></div>
 
   <div id="authorsList">
       <div class="empty-state">正在加载...</div>
