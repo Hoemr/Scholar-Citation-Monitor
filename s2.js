@@ -283,6 +283,22 @@ class S2BackgroundService {
 
         await this.delay(600);
 
+        // 引用总量口径：S2 的 author.citationCount 是预计算的作者级聚合值，更新会滞后于
+        // 逐篇 citationCount；而站点（/me/research 与作者页）展示的是按论文实时聚合的结果，
+        // 两者可能相差数条（实测某作者：作者级 120 vs 逐篇求和 126）。
+        // 插件本来就要拉全部论文用于追踪逐篇变化，因此这里优先用逐篇求和，使显示数字与站点一致。
+        // 仅当论文列表被分页上限截断（papers.length < paperCount）时，才退回作者级聚合值以免少算。
+        const papersCitationsSum = papers.reduce((sum, p) => sum + (p.citationCount || 0), 0);
+        const paperListComplete = papers.length >= (info.paperCount || 0);
+        const totalCitations = paperListComplete
+            ? Math.max(papersCitationsSum, info.citationCount || 0)
+            : (info.citationCount || 0);
+        console.log(
+            `📈 [S2] ${info.name || author.authorId} 引用总量：逐篇求和=${papersCitationsSum}，` +
+            `作者级=${info.citationCount || 0} → 采用 ${totalCitations}` +
+            `${paperListComplete ? '' : '（论文列表不完整，退回作者级）'}`
+        );
+
         // 3. Carry over display state and per-paper baselines (stable paperId keys)
         const updated = {
             ...author,
@@ -290,7 +306,7 @@ class S2BackgroundService {
             name: info.name || author.name,
             affiliation: (info.affiliations || []).join(', ') || author.affiliation,
             url: `https://www.semanticscholar.org/author/${author.authorId}`,
-            totalCitations: info.citationCount || 0,
+            totalCitations,
             hIndex: info.hIndex || 0,
             paperCount: info.paperCount || papers.length,
             papers,
