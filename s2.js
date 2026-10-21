@@ -9,7 +9,9 @@ class S2BackgroundService {
     constructor() {
         this.API_BASE = 'https://api.semanticscholar.org/graph/v1';
         this.ALARM_NAME = 's2AutoRefresh';
-        this.REFRESH_INTERVAL_MINUTES = 30;
+        // 与 Google Scholar 模块保持一致：默认一天刷新两次（12 小时）。
+        // S2 走官方 API 不受反爬影响，但统一节奏可减少整体请求量。
+        this.REFRESH_INTERVAL_MINUTES = 720;
 
         // Papers with more citations than this are count-only (baseline would cost
         // too many requests; 3 pages x 1000 covers virtually all personal profiles)
@@ -39,15 +41,15 @@ class S2BackgroundService {
             });
         });
         chrome.runtime.onStartup.addListener(() => this.setupAlarm());
-        // Catch-up refresh only when data is stale (SW wakes on every popup open;
-        // unconditional refreshes would burn the rate-limit budget) — same 35min
-        // threshold as the GS module's performStartupCheck
+        // Catch-up refresh only when a whole interval was missed (SW wakes on every
+        // popup open; a short threshold would defeat the 12h schedule). Same rule as
+        // the GS module's performStartupCheck.
         setTimeout(async () => {
             try {
                 const authors = await this.getAuthors();
                 if (authors.length === 0) return;
                 const last = Math.max(...authors.map(a => new Date(a.lastUpdated || 0).getTime()));
-                if (Date.now() - last > 35 * 60 * 1000) {
+                if (Date.now() - last > this.REFRESH_INTERVAL_MINUTES * 60 * 1000) {
                     await this.refreshAllAuthors(false);
                 }
             } catch (e) { /* ignore */ }
@@ -56,12 +58,16 @@ class S2BackgroundService {
 
     setupAlarm() {
         chrome.alarms.get(this.ALARM_NAME, (existing) => {
-            if (existing) return;
+            // 周期与当前配置不一致时重建，否则改了默认间隔后老用户仍被旧周期钉住
+            const periodMismatch = !!(existing &&
+                existing.periodInMinutes !== this.REFRESH_INTERVAL_MINUTES);
+            if (existing && !periodMismatch) return;
             chrome.alarms.create(this.ALARM_NAME, {
-                delayInMinutes: 0.5,
+                // 仅因周期变化重建时等满一个周期，避免刚改完就立刻请求
+                delayInMinutes: periodMismatch ? this.REFRESH_INTERVAL_MINUTES : 0.5,
                 periodInMinutes: this.REFRESH_INTERVAL_MINUTES
             });
-            console.log('⏰ [S2] 已创建定时任务');
+            console.log(`⏰ [S2] 定时任务已${periodMismatch ? '按新周期重建' : '创建'}（每 ${this.REFRESH_INTERVAL_MINUTES} 分钟）`);
         });
     }
 

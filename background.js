@@ -14,12 +14,13 @@ constructor() {
         'scholar.google.ca',
         'scholar.google.cn'
     ];
-    this.REFRESH_INTERVAL_MINUTES = 30;
+    // 默认一天刷新两次（12 小时）。Google Scholar 是抓网页，频率越低触发反爬的概率越小。
+    this.REFRESH_INTERVAL_MINUTES = 720;
     this.ALARM_NAME = 'scholarAutoRefresh';
     this.KEEPALIVE_ALARM = 'keepAlive';
 
     // 被 Scholar 反爬拦截后的自动刷新退避阶梯（分钟）：2h → 4h → 8h → 12h。
-    // 在被封的 session 上继续每 30 分钟硬撞只会延长封锁，所以改成逐级拉长暂停时间。
+    // 在被封的 session 上按原周期继续请求只会延长封锁，所以改成逐级拉长暂停时间。
     this.ANTI_CRAWL_BACKOFF_MINUTES = [0, 120, 240, 480, 720];
 
     // 引用明细追踪硬上限：超过此引用数的论文不追踪（受限于反爬 + 抓取页数 cap，
@@ -56,7 +57,10 @@ async init() {
 
 setupAlarms(forceReset = false) {
     chrome.alarms.get(this.ALARM_NAME, (existingAlarm) => {
-        const needCreate = forceReset || !existingAlarm;
+        // 周期与当前配置不一致时也要重建：否则改了默认间隔后，老用户仍被旧周期钉住
+        const periodMismatch = !!(existingAlarm &&
+            existingAlarm.periodInMinutes !== this.REFRESH_INTERVAL_MINUTES);
+        const needCreate = forceReset || !existingAlarm || periodMismatch;
         if (!needCreate) {
             console.log(`✅ 定时任务已存在，下次执行: ${new Date(existingAlarm.scheduledTime)}`);
             chrome.alarms.get(this.KEEPALIVE_ALARM, (ka) => {
@@ -71,14 +75,16 @@ setupAlarms(forceReset = false) {
         }
         chrome.alarms.clear(this.ALARM_NAME, () => {
             chrome.alarms.create(this.ALARM_NAME, {
-                delayInMinutes: 0.1,
+                // 首次安装：稍后立刻拉一次；仅因周期变化而重建：等满一个周期，
+                // 避免刚改完间隔就立刻请求 Scholar
+                delayInMinutes: (forceReset || !existingAlarm) ? 0.1 : this.REFRESH_INTERVAL_MINUTES,
                 periodInMinutes: this.REFRESH_INTERVAL_MINUTES
             });
             chrome.alarms.create(this.KEEPALIVE_ALARM, {
                 delayInMinutes: 1,
                 periodInMinutes: 10
             });
-            console.log(`⏰ 已创建定时任务 (forceReset=${forceReset})`);
+            console.log(`⏰ 已创建定时任务 (forceReset=${forceReset}, 周期=${this.REFRESH_INTERVAL_MINUTES}分钟)`);
         });
     });
 }
@@ -231,9 +237,10 @@ async performStartupCheck() {
 
         console.log(`⏰ 距离上次更新: ${Math.round(timeSinceLastUpdate)}分钟`);
 
-        // 如果超过35分钟没有更新，提前 alarm 让监听器统一触发（避免与 alarm 双重 executeAutoRefresh）
-        if (timeSinceLastUpdate > 35) {
-            console.log('⚡ 距离上次更新时间过长，提前 alarm 立即触发');
+        // 补刷阈值与刷新周期保持一致：只有确实漏掉了一整个周期（例如浏览器长时间关闭）
+        // 才补，否则每次打开弹窗/唤醒 Service Worker 都会触发刷新，把「一天两次」的间隔架空
+        if (timeSinceLastUpdate > this.REFRESH_INTERVAL_MINUTES) {
+            console.log('⚡ 已超过一个刷新周期未更新，补一次');
             chrome.alarms.create(this.ALARM_NAME, {
                 delayInMinutes: 0.1,
                 periodInMinutes: this.REFRESH_INTERVAL_MINUTES
@@ -1831,7 +1838,7 @@ extractPapersFromHtmlWithRegex(html, domain, startIndex = 0) {
   // 不变化的论文永远拿不到基线，导致新增引用者永远显示不出来
   //
   // 反爬策略（B 分摊）：每次 refresh 最多初始化 MAX_INITIALIZE_PER_REFRESH 篇，
-  // 利用 30 分钟 alarm 周期自然分摊。140 篇作者约 5 小时自动完成，用户无感
+  // 利用 alarm 周期自然分摊，避免一次刷新里集中抓太多。周期越长，预热分摊得越慢
   //
   // 状态判断：用 paper.warmedUp 作为每篇论文的断点，所有合格论文都 warmedUp 后 eligible=0 自动跳过
   async initializeBaseline(author, updatedInfo, domain) {
@@ -1873,7 +1880,7 @@ extractPapersFromHtmlWithRegex(html, domain, startIndex = 0) {
           try {
               const result = await this.fetchNewCitersForPaper(paper.link, domain, []);
               // 反爬触发：存 alert 提示用户去验证，并立即结束本次初始化
-              // Scholar 反爬是 session 级别，等下次 refresh（30 分钟后）大概率仍被拦
+              // Scholar 反爬是 session 级别，等下次 refresh（下一个周期）大概率仍被拦
               if (result.antiCrawl) {
                   await this.setAntiCrawlAlert(author, paper.title, result.citingUrl);
                   console.warn(`🚨 反爬触发，立即结束本次初始化（已成功 ${successCount}/${toInit.length}），下次 refresh 继续`);

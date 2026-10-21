@@ -70,7 +70,7 @@ const I18n = {
             refresh_failed_authors: '失败的作者: {names}',
 
             // Background notifications
-            notify_installed: '扩展已安装，将每30分钟自动监控学者引用变化',
+            notify_installed: '扩展已安装，将每12小时（每天两次）自动监控学者引用变化',
             notify_error_title: 'Scholar Monitor 错误',
             notify_refresh_failed: '自动刷新失败: {error}',
             notify_citation_update: '🎉 引用数量更新',
@@ -191,7 +191,7 @@ const I18n = {
             refresh_result: 'Refresh complete! Success: {success}, Failed: {fail}',
             refresh_failed_authors: 'Failed authors: {names}',
 
-            notify_installed: 'Extension installed. Will auto-monitor citation changes every 30 minutes',
+            notify_installed: 'Extension installed. Will auto-monitor citation changes every 12 hours (twice a day)',
             notify_error_title: 'Scholar Monitor Error',
             notify_refresh_failed: 'Auto-refresh failed: {error}',
             notify_citation_update: '🎉 Citation Update',
@@ -312,7 +312,7 @@ const I18n = {
             refresh_result: 'Aktualisierung abgeschlossen! Erfolgreich: {success}, Fehlgeschlagen: {fail}',
             refresh_failed_authors: 'Fehlgeschlagene Autoren: {names}',
 
-            notify_installed: 'Erweiterung installiert. Automatische Überwachung alle 30 Minuten',
+            notify_installed: 'Erweiterung installiert. Automatische Überwachung alle 12 Stunden (zweimal täglich)',
             notify_error_title: 'Scholar Monitor Fehler',
             notify_refresh_failed: 'Automatische Aktualisierung fehlgeschlagen: {error}',
             notify_citation_update: '🎉 Zitationsaktualisierung',
@@ -404,7 +404,7 @@ const I18n = {
             refresh_result: 'Actualisation terminée ! Réussite : {success}, Échec : {fail}',
             refresh_failed_authors: 'Auteurs échoués : {names}',
 
-            notify_installed: 'Extension installée. Surveillance automatique toutes les 30 minutes',
+            notify_installed: 'Extension installée. Surveillance automatique toutes les 12 heures (deux fois par jour)',
             notify_error_title: 'Erreur Scholar Monitor',
             notify_refresh_failed: 'Échec de l\'actualisation automatique : {error}',
             notify_citation_update: '🎉 Mise à jour des citations',
@@ -496,7 +496,7 @@ const I18n = {
             refresh_result: '새로고침 완료! 성공: {success}, 실패: {fail}',
             refresh_failed_authors: '실패한 저자: {names}',
 
-            notify_installed: '확장 프로그램이 설치되었습니다. 30분마다 자동 모니터링합니다',
+            notify_installed: '확장 프로그램이 설치되었습니다. 12시간마다(하루 두 번) 자동 모니터링합니다',
             notify_error_title: 'Scholar Monitor 오류',
             notify_refresh_failed: '자동 새로고침 실패: {error}',
             notify_citation_update: '🎉 인용 횟수 업데이트',
@@ -588,7 +588,7 @@ const I18n = {
             refresh_result: '更新完了！成功: {success}, 失敗: {fail}',
             refresh_failed_authors: '失敗した著者: {names}',
 
-            notify_installed: '拡張機能がインストールされました。30分ごとに自動監視します',
+            notify_installed: '拡張機能がインストールされました。12時間ごと（1日2回）に自動監視します',
             notify_error_title: 'Scholar Monitor エラー',
             notify_refresh_failed: '自動更新に失敗しました: {error}',
             notify_citation_update: '🎉 被引用数アップデート',
@@ -680,7 +680,7 @@ const I18n = {
             refresh_result: '¡Actualización completa! Éxito: {success}, Fallo: {fail}',
             refresh_failed_authors: 'Autores fallidos: {names}',
 
-            notify_installed: 'Extensión instalada. Monitoreo automático cada 30 minutos',
+            notify_installed: 'Extensión instalada. Monitoreo automático cada 12 horas (dos veces al día)',
             notify_error_title: 'Error de Scholar Monitor',
             notify_refresh_failed: 'Actualización automática fallida: {error}',
             notify_citation_update: '🎉 Actualización de citas',
@@ -772,7 +772,7 @@ const I18n = {
             refresh_result: 'Atualização concluída! Sucesso: {success}, Falha: {fail}',
             refresh_failed_authors: 'Autores com falha: {names}',
 
-            notify_installed: 'Extensão instalada. Monitoramento automático a cada 30 minutos',
+            notify_installed: 'Extensão instalada. Monitoramento automático a cada 12 horas (duas vezes ao dia)',
             notify_error_title: 'Erro do Scholar Monitor',
             notify_refresh_failed: 'Falha na atualização automática: {error}',
             notify_citation_update: '🎉 Atualização de citações',
